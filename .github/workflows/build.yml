@@ -25,7 +25,7 @@ jobs:
   build-windows-x86_64-gnu:
     name: Ubuntu cross-build for Windows x86_64 GNU
     needs: tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.package.outputs.version }}
     env:
