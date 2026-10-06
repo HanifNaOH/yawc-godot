@@ -47,9 +47,9 @@ jobs:
       - name: Install MinGW-w64
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: false
-          install: mingw-w64-x86_64-gcc
+          install: mingw-w64-ucrt-x86_64-gcc
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
