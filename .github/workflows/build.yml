@@ -23,9 +23,9 @@ jobs:
     uses: ./.github/workflows/test.yml
 
   build-windows-x86_64-gnu:
-    name: Ubuntu cross-build for Windows x86_64 GNU
+    name: Windows x86_64 GNU build
     needs: tests
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     outputs:
       version: ${{ steps.package.outputs.version }}
     env:
@@ -44,85 +44,88 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install cross-compiler and Wine
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            gcc-mingw-w64-x86-64 wine wine64 xvfb unzip zip
+      - name: Install MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
         run: |
-          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
-          if [[ -z "$version" ]]; then
-            echo "::error::Could not find yawc-godot in Cargo metadata."
-            exit 1
-          fi
-          expected_tag="v$version"
-          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
-            echo "::error::Tag '$GITHUB_REF_NAME' must match Cargo.toml version '$expected_tag'."
-            exit 1
-          fi
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          $package = $metadata.packages | Where-Object { $_.name -eq "yawc-godot" }
+          if ($null -eq $package) { throw "Could not find yawc-godot in Cargo metadata." }
+          $expectedTag = "v$($package.version)"
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+            throw "Tag '$env:GITHUB_REF_NAME' must match Cargo.toml version '$expectedTag'."
+          }
 
       - name: Build debug GDExtension for GUT
         run: cargo build --locked --target x86_64-pc-windows-gnu
 
       - name: Stage debug library in addon
+        shell: pwsh
         run: |
-          mkdir -p addons/yawc_transport/bin
-          cp .godot/cargo-target/x86_64-pc-windows-gnu/debug/yawc_godot.dll \
-            addons/yawc_transport/bin/yawc_godot.windows.debug.x86_64.dll
+          $bin = "addons/yawc_transport/bin"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+          Copy-Item `
+            ".godot/cargo-target/x86_64-pc-windows-gnu/debug/yawc_godot.dll" `
+            "$bin/yawc_godot.windows.debug.x86_64.dll" `
+            -Force
 
       - name: Download Godot 4.7.1
+        shell: pwsh
         run: |
-          archive="$RUNNER_TEMP/godot-4.7.1.zip"
-          install_path="$RUNNER_TEMP/godot"
-          mkdir -p "$install_path"
-          curl --fail --location --retry 3 \
-            https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_win64.exe.zip \
-            --output "$archive"
-          unzip -q "$archive" -d "$install_path"
+          $archive = Join-Path $env:RUNNER_TEMP "godot-4.7.1.zip"
+          $installPath = Join-Path $env:RUNNER_TEMP "godot"
+          New-Item -ItemType Directory -Force -Path $installPath | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_win64.exe.zip" `
+            -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $installPath -Force
 
       - name: Run GUT unit tests
-        env:
-          WINEPREFIX: ${{ runner.temp }}/wine
-          WINEARCH: win64
-          WINEDEBUG: -all
+        shell: pwsh
         run: |
-          xvfb-run --auto-servernum wineboot-stable --init
-          godot_exe="$RUNNER_TEMP/godot/Godot_v4.7.1-stable_win64.exe"
-          godot_windows_path="$(winepath-stable -w "$godot_exe")"
-          project_windows_path="$(winepath-stable -w "$GITHUB_WORKSPACE")"
-          xvfb-run --auto-servernum wine-stable "$godot_windows_path" \
-            --headless --path "$project_windows_path" \
-            -s res://addons/gut/gut_cmdln.gd
+          $godot = Join-Path $env:RUNNER_TEMP "godot\Godot_v4.7.1-stable_win64_console.exe"
+          & $godot --headless --path $env:GITHUB_WORKSPACE -s addons/gut/gut_cmdln.gd
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build GDExtension
         run: cargo build --locked --release --target x86_64-pc-windows-gnu
 
       - name: Stage release library in addon
+        shell: pwsh
         run: |
-          cp .godot/cargo-target/x86_64-pc-windows-gnu/release/yawc_godot.dll \
-            addons/yawc_transport/bin/yawc_godot.windows.release.x86_64.dll
+          Copy-Item `
+            ".godot/cargo-target/x86_64-pc-windows-gnu/release/yawc_godot.dll" `
+            "addons/yawc_transport/bin/yawc_godot.windows.release.x86_64.dll" `
+            -Force
 
       - name: Package versioned addon
         id: package
         env:
           MANUAL_VERSION: ${{ inputs.version }}
+        shell: pwsh
         run: |
-          cargo_version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
-          version="$cargo_version"
-          if [[ "$GITHUB_REF_TYPE" != "tag" && -n "$MANUAL_VERSION" ]]; then
-            version="$MANUAL_VERSION"
-          fi
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Version '$version' is not valid SemVer. Enter it without a leading v."
-            exit 1
-          fi
-          archive="yawc-godot-v$version-windows-x86_64-gnu.zip"
-          zip -qr "$archive" addons/yawc_transport
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          $package = $metadata.packages | Where-Object { $_.name -eq "yawc-godot" }
+          if ($null -eq $package) { throw "Could not find yawc-godot in Cargo metadata." }
+          $cargoVersion = $package.version
+          $version = $cargoVersion
+          if ($env:GITHUB_REF_TYPE -ne "tag" -and -not [string]::IsNullOrWhiteSpace($env:MANUAL_VERSION)) {
+            $version = $env:MANUAL_VERSION
+          }
+          if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
+            throw "Version '$version' is not valid SemVer. Enter it without a leading v."
+          }
+          $archive = "yawc-godot-v$version-windows-x86_64-gnu.zip"
+          Compress-Archive -Path "addons/yawc_transport" -DestinationPath $archive -Force
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "archive=$archive" >> $env:GITHUB_OUTPUT
 
       - name: Upload Windows GDExtension
         uses: actions/upload-artifact@v7
