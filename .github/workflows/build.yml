@@ -8,6 +8,11 @@ on:
         required: false
         default: ""
         type: string
+      publish_release:
+        description: Publish a GitHub Release (version must match Cargo.toml and CHANGELOG.md)
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -61,6 +66,19 @@ jobs:
           $expectedTag = "v$($package.version)"
           if ($env:GITHUB_REF_NAME -ne $expectedTag) {
             throw "Tag '$env:GITHUB_REF_NAME' must match Cargo.toml version '$expectedTag'."
+          }
+
+      - name: Validate manual release version
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        shell: pwsh
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          $package = $metadata.packages | Where-Object { $_.name -eq "yawc-godot" }
+          if ($null -eq $package) { throw "Could not find yawc-godot in Cargo metadata." }
+          if (-not [string]::IsNullOrWhiteSpace($env:MANUAL_VERSION) -and $env:MANUAL_VERSION -cne $package.version) {
+            throw "Manual release version '$env:MANUAL_VERSION' must match Cargo.toml version '$($package.version)'."
           }
 
       - name: Build debug GDExtension for GUT
@@ -135,7 +153,7 @@ jobs:
 
   github-release:
     name: Create GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
     needs: build-windows-x86_64-gnu
     runs-on: ubuntu-24.04
     permissions:
@@ -174,7 +192,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu.zip" \
-            --verify-tag \
-            --notes-file "$RELEASE_NOTES_FILE"
+          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            tag="v${{ needs.build-windows-x86_64-gnu.outputs.version }}"
+          fi
+          asset="dist/yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu.zip"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            gh release create "$tag" "$asset" \
+              --verify-tag \
+              --notes-file "$RELEASE_NOTES_FILE"
+          else
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::Tag '$tag' already exists. Run this workflow from that tag instead."
+              exit 1
+            fi
+            gh release create "$tag" "$asset" \
+              --target "$GITHUB_SHA" \
+              --notes-file "$RELEASE_NOTES_FILE"
+          fi
