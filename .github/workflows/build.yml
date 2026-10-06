@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            gcc-mingw-w64-x86-64 wine64 xvfb unzip zip
+            gcc-mingw-w64-x86-64 wine wine64 xvfb unzip zip
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -83,11 +83,11 @@ jobs:
           WINEARCH: win64
           WINEDEBUG: -all
         run: |
-          xvfb-run --auto-servernum wineboot --init
+          xvfb-run --auto-servernum wineboot-stable --init
           godot_exe="$RUNNER_TEMP/godot/Godot_v4.7.1-stable_win64.exe"
-          godot_windows_path="$(winepath -w "$godot_exe")"
-          project_windows_path="$(winepath -w "$GITHUB_WORKSPACE")"
-          xvfb-run --auto-servernum wine64 "$godot_windows_path" \
+          godot_windows_path="$(winepath-stable -w "$godot_exe")"
+          project_windows_path="$(winepath-stable -w "$GITHUB_WORKSPACE")"
+          xvfb-run --auto-servernum wine-stable "$godot_windows_path" \
             --headless --path "$project_windows_path" \
             -s res://addons/gut/gut_cmdln.gd
 
