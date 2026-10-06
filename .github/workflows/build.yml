@@ -2,6 +2,12 @@ name: Build GDExtension
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Optional version label for this manual build (without a leading v)
+        required: false
+        default: ""
+        type: string
   push:
     tags:
       - "v*"
@@ -101,8 +107,18 @@ jobs:
 
       - name: Package versioned addon
         id: package
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
         run: |
-          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
+          cargo_version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
+          version="$cargo_version"
+          if [[ "$GITHUB_REF_TYPE" != "tag" && -n "$MANUAL_VERSION" ]]; then
+            version="$MANUAL_VERSION"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version '$version' is not valid SemVer. Enter it without a leading v."
+            exit 1
+          fi
           archive="yawc-godot-v$version-windows-x86_64-gnu.zip"
           zip -qr "$archive" addons/yawc_transport
           echo "version=$version" >> "$GITHUB_OUTPUT"
