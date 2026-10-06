@@ -53,7 +53,7 @@ transport.connect_to_url("wss://example.org/socket")
 
 ## CI
 
-GitHub Actions checks formatting, runs the Rust and GUT unit tests, checks the echo-server example, and packages the Windows x86_64 GNU addon. Pushing a matching `vX.Y.Z` tag creates a GitHub Release with the addon ZIP after CI passes.
+The test workflow runs formatting and Rust tests on every push and pull request using the single pinned Rust toolchain, 1.99.0. The separate build workflow runs on Windows, builds the Windows x86_64 GNU addon, and runs GUT natively. Manual builds accept an optional version label without a leading `v` (for example, `0.2.0-beta.1`); it changes the ZIP/artifact name only and does not publish a release.
 
 ## Versioning and Releases
 
@@ -64,7 +64,7 @@ Set the version manually in `Cargo.toml` under `[package]`:
 version = "0.1.0"
 ```
 
-After changing it, run `cargo check` to refresh `Cargo.lock`, then commit and push both files. Push a matching `vX.Y.Z` tag to trigger the release; the workflow rejects tags that do not match the Cargo version.
+Before a release, update `Cargo.toml` and add the matching `X.Y.Z` section to `CHANGELOG.md`. Run `cargo check` to refresh `Cargo.lock`, then commit and push all three files. Push a matching `vX.Y.Z` tag to build the addon and create a GitHub Release using that changelog section as its release notes; the workflow rejects tags that do not match the Cargo version or have no changelog entry.
 
 ```powershell
 git tag -a v0.1.0 -m "v0.1.0"

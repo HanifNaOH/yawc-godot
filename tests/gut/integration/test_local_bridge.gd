@@ -1,5 +1,6 @@
 extends GutTest
 
+const TEST_HELPERS = preload("res://tests/gut/helpers/transport_test_helpers.gd")
 const TEST_URL := "ws://127.0.0.1:18765"
 
 var _transport: Node
@@ -33,7 +34,8 @@ func test_connect_echo_close_and_main_thread_signals() -> void:
 	add_child(_transport)
 
 	assert_true(_transport.connect_to_url(TEST_URL), "connection command should queue")
-	var opened := await _wait_until(
+	var opened := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return _opened or not _error_message.is_empty(),
 		10000,
 	)
@@ -43,7 +45,8 @@ func test_connect_echo_close_and_main_thread_signals() -> void:
 		return
 
 	assert_true(_transport.send_text("bridge-test"), "text command should queue")
-	var received := await _wait_until(
+	var received := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return not _received_text.is_empty() or not _error_message.is_empty(),
 		5000,
 	)
@@ -53,16 +56,11 @@ func test_connect_echo_close_and_main_thread_signals() -> void:
 		return
 
 	_transport.close()
-	assert_true(await _wait_until(func(): return _closed, 5000), "closed signal should arrive")
+	assert_true(
+		await TEST_HELPERS.wait_until(get_tree(), func(): return _closed, 5000),
+		"closed signal should arrive",
+	)
 	assert_true(_signals_on_main_thread, "all signals should run on the main thread")
-
-func _wait_until(predicate: Callable, timeout_msec: int) -> bool:
-	var deadline := Time.get_ticks_msec() + timeout_msec
-	while Time.get_ticks_msec() < deadline:
-		if predicate.call():
-			return true
-		await get_tree().process_frame
-	return predicate.call()
 
 func _record_signal_thread() -> void:
 	if not Thread.is_main_thread():

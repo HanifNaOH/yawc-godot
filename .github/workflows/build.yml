@@ -148,6 +148,28 @@ jobs:
           name: yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu
           path: dist
 
+      - name: Prepare release notes from changelog
+        env:
+          RELEASE_VERSION: ${{ needs.build-windows-x86_64-gnu.outputs.version }}
+        run: |
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          awk -v version="$RELEASE_VERSION" '
+            BEGIN { header = "## [" version "]" }
+            $0 == header || index($0, header " - ") == 1 {
+              in_release = 1
+              found = 1
+              next
+            }
+            in_release && /^## / { exit }
+            in_release { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > "$notes_file"
+          if [[ ! -s "$notes_file" ]]; then
+            echo "::error::No changelog entry found for version $RELEASE_VERSION."
+            exit 1
+          fi
+          echo "RELEASE_NOTES_FILE=$notes_file" >> "$GITHUB_ENV"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -155,4 +177,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "dist/yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu.zip" \
             --verify-tag \
-            --generate-notes
+            --notes-file "$RELEASE_NOTES_FILE"

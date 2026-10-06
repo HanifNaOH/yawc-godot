@@ -77,9 +77,3 @@ impl INode for YawcTransport {
         self.worker.shutdown();
     }
 }
-
-impl Drop for YawcTransport {
-    fn drop(&mut self) {
-        self.worker.shutdown();
-    }
-}

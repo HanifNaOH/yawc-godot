@@ -1,5 +1,6 @@
 extends GutTest
 
+const TEST_HELPERS = preload("res://tests/gut/helpers/transport_test_helpers.gd")
 const ROOM_URL := "wss://archipelago.gg:39841" #Private Archipelago room URL
 const CONNECT_TIMEOUT_MSEC := 20000
 const MESSAGE_TIMEOUT_MSEC := 5000
@@ -35,7 +36,8 @@ func test_room_sends_room_info_without_connect_packet() -> void:
 	add_child(_transport)
 
 	assert_true(_transport.connect_to_url(ROOM_URL), "connection command should queue")
-	var opened := await _wait_until(
+	var opened := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return _opened or not _error_message.is_empty(),
 		CONNECT_TIMEOUT_MSEC,
 	)
@@ -44,7 +46,8 @@ func test_room_sends_room_info_without_connect_packet() -> void:
 	if not _opened or not _error_message.is_empty():
 		return
 
-	var received := await _wait_until(
+	var received := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return not _received_text.is_empty() or not _error_message.is_empty(),
 		MESSAGE_TIMEOUT_MSEC,
 	)
@@ -69,15 +72,10 @@ func test_room_sends_room_info_without_connect_packet() -> void:
 		return
 
 	_transport.close()
-	assert_true(await _wait_until(func(): return _closed, MESSAGE_TIMEOUT_MSEC), "closed signal should arrive")
-
-func _wait_until(predicate: Callable, timeout_msec: int) -> bool:
-	var deadline := Time.get_ticks_msec() + timeout_msec
-	while Time.get_ticks_msec() < deadline:
-		if predicate.call():
-			return true
-		await get_tree().process_frame
-	return predicate.call()
+	assert_true(
+		await TEST_HELPERS.wait_until(get_tree(), func(): return _closed, MESSAGE_TIMEOUT_MSEC),
+		"closed signal should arrive",
+	)
 
 func _record_signal_thread() -> void:
 	if not Thread.is_main_thread():

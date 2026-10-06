@@ -1,5 +1,6 @@
 extends GutTest
 
+const TEST_HELPERS = preload("res://tests/gut/helpers/transport_test_helpers.gd")
 const STALLED_PORT := 18766
 const CONNECTION_TEST_TIMEOUT_MSEC := 20000
 const SOCKET_CLOSE_TIMEOUT_MSEC := 2000
@@ -52,7 +53,8 @@ func test_stalled_handshake_times_out_and_closes_worker() -> void:
 	if _peer == null:
 		return
 
-	var timed_out := await _wait_until(
+	var timed_out := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return not _error_message.is_empty() and _connection_closed,
 		CONNECTION_TEST_TIMEOUT_MSEC,
 	)
@@ -61,7 +63,8 @@ func test_stalled_handshake_times_out_and_closes_worker() -> void:
 	if not timed_out:
 		return
 
-	var peer_disconnected := await _wait_until(
+	var peer_disconnected := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return _is_peer_disconnected(),
 		SOCKET_CLOSE_TIMEOUT_MSEC,
 	)
@@ -77,20 +80,13 @@ func test_invalid_url_is_rejected() -> void:
 	add_child(_transport)
 
 	assert_true(_transport.connect_to_url("not a websocket url"), "command should queue")
-	var rejected := await _wait_until(
+	var rejected := await TEST_HELPERS.wait_until(
+		get_tree(),
 		func(): return not _error_message.is_empty() and _connection_closed,
 		5000,
 	)
 	assert_true(rejected, "invalid URL should emit error and closed")
 	assert_false(_error_message.is_empty(), "invalid URL should provide an error")
-
-func _wait_until(predicate: Callable, timeout_msec: int) -> bool:
-	var deadline := Time.get_ticks_msec() + timeout_msec
-	while Time.get_ticks_msec() < deadline:
-		if predicate.call():
-			return true
-		await get_tree().process_frame
-	return predicate.call()
 
 func _is_peer_disconnected() -> bool:
 	_peer.poll()
