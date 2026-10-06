@@ -1,0 +1,139 @@
+name: Build GDExtension
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/test.yml
+
+  build-windows-x86_64-gnu:
+    name: Ubuntu cross-build for Windows x86_64 GNU
+    needs: tests
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+    env:
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Cache Cargo dependencies and build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .godot/cargo-target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install cross-compiler and Wine
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            gcc-mingw-w64-x86-64 wine64 xvfb unzip zip
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not find yawc-godot in Cargo metadata."
+            exit 1
+          fi
+          expected_tag="v$version"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' must match Cargo.toml version '$expected_tag'."
+            exit 1
+          fi
+
+      - name: Build debug GDExtension for GUT
+        run: cargo build --locked --target x86_64-pc-windows-gnu
+
+      - name: Stage debug library in addon
+        run: |
+          mkdir -p addons/yawc_transport/bin
+          cp .godot/cargo-target/x86_64-pc-windows-gnu/debug/yawc_godot.dll \
+            addons/yawc_transport/bin/yawc_godot.windows.debug.x86_64.dll
+
+      - name: Download Godot 4.7.1
+        run: |
+          archive="$RUNNER_TEMP/godot-4.7.1.zip"
+          install_path="$RUNNER_TEMP/godot"
+          mkdir -p "$install_path"
+          curl --fail --location --retry 3 \
+            https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_win64.exe.zip \
+            --output "$archive"
+          unzip -q "$archive" -d "$install_path"
+
+      - name: Run GUT unit tests
+        env:
+          WINEPREFIX: ${{ runner.temp }}/wine
+          WINEARCH: win64
+          WINEDEBUG: -all
+        run: |
+          xvfb-run --auto-servernum wineboot --init
+          godot_exe="$RUNNER_TEMP/godot/Godot_v4.7.1-stable_win64.exe"
+          godot_windows_path="$(winepath -w "$godot_exe")"
+          project_windows_path="$(winepath -w "$GITHUB_WORKSPACE")"
+          xvfb-run --auto-servernum wine64 "$godot_windows_path" \
+            --headless --path "$project_windows_path" \
+            -s res://addons/gut/gut_cmdln.gd
+
+      - name: Build GDExtension
+        run: cargo build --locked --release --target x86_64-pc-windows-gnu
+
+      - name: Stage release library in addon
+        run: |
+          cp .godot/cargo-target/x86_64-pc-windows-gnu/release/yawc_godot.dll \
+            addons/yawc_transport/bin/yawc_godot.windows.release.x86_64.dll
+
+      - name: Package versioned addon
+        id: package
+        run: |
+          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "yawc-godot") | .version')"
+          archive="yawc-godot-v$version-windows-x86_64-gnu.zip"
+          zip -qr "$archive" addons/yawc_transport
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Windows GDExtension
+        uses: actions/upload-artifact@v7
+        with:
+          name: yawc-godot-v${{ steps.package.outputs.version }}-windows-x86_64-gnu
+          path: ${{ steps.package.outputs.archive }}
+
+  github-release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-windows-x86_64-gnu
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/yawc-godot-v${{ needs.build-windows-x86_64-gnu.outputs.version }}-windows-x86_64-gnu.zip" \
+            --verify-tag \
+            --generate-notes
