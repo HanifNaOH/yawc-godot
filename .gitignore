@@ -19,4 +19,7 @@ Desktop.ini
 !*.so
 !*.dylib
 
+# Locally built GDExtension libraries are packaged by CI, not tracked in Git.
+/addons/yawc_transport/bin/*.dll
+
 .vscode/

@@ -3,5 +3,5 @@ entry_symbol = "gdext_rust_init"
 compatibility_minimum = "4.7"
 
 [libraries]
-windows.debug.x86_64 = "res://.godot/cargo-target/x86_64-pc-windows-gnu/debug/yawc_godot.dll"
-windows.release.x86_64 = "res://.godot/cargo-target/x86_64-pc-windows-gnu/release/yawc_godot.dll"
+windows.debug.x86_64 = "res://addons/yawc_transport/bin/yawc_godot.windows.debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/yawc_transport/bin/yawc_godot.windows.release.x86_64.dll"
