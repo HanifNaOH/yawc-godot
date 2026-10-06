@@ -1,0 +1,20 @@
+# Godot editor cache
+/.godot/
+
+# Rust build artifacts and compiler backups
+/target/
+**/*.rs.bk
+*.profraw
+
+# Local editor and operating-system files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Allow distributable GDExtension libraries despite global binary ignores
+!*.dll
+!*.so
+!*.dylib
