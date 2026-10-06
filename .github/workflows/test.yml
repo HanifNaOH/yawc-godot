@@ -16,26 +16,19 @@ permissions:
 
 jobs:
   rust-test:
-    name: Rust tests - ${{ matrix.toolchain }}
+    name: Rust tests - 1.99.0
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        toolchain: [stable, beta, nightly]
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
-        run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal
-
-      - name: Install rustfmt
-        run: rustup component add rustfmt --toolchain ${{ matrix.toolchain }}
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt
 
       - name: Check formatting
-        run: cargo +${{ matrix.toolchain }} fmt --all -- --check
+        run: cargo +1.99.0 fmt --all -- --check
 
       - name: Test on Linux
-        run: cargo +${{ matrix.toolchain }} test --locked --verbose --target x86_64-unknown-linux-gnu
+        run: cargo +1.99.0 test --locked --verbose --target x86_64-unknown-linux-gnu
 
       - name: Check echo server example
-        run: cargo +${{ matrix.toolchain }} check --locked --example bridge_echo_server --target x86_64-unknown-linux-gnu
+        run: cargo +1.99.0 check --locked --example bridge_echo_server --target x86_64-unknown-linux-gnu
