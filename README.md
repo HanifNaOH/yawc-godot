@@ -13,8 +13,6 @@ Download a release archive and extract `addons/yawc_transport` into the host pro
 Create the node, connect its signals, then request a connection:
 
 ```gdscript
-var transport := YawcTransport.new()
-add_child(transport)
 
 transport.opened.connect(_on_opened)
 transport.text_message.connect(_on_text_message)
