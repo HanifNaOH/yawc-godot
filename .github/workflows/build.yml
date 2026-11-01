@@ -94,6 +94,9 @@ jobs:
             "$bin/yawc_godot.windows.debug.x86_64.dll" `
             -Force
 
+      - name: Build local bridge echo server for GUT integration test
+        run: cargo build --locked --example bridge_echo_server --target x86_64-pc-windows-gnu
+
       - name: Download Godot 4.7.1
         shell: pwsh
         run: |
@@ -105,12 +108,34 @@ jobs:
             -OutFile $archive
           Expand-Archive -Path $archive -DestinationPath $installPath -Force
 
-      - name: Run GUT unit tests
+      - name: Run GUT unit and local bridge integration tests
         shell: pwsh
         run: |
           $godot = Join-Path $env:RUNNER_TEMP "godot\Godot_v4.7.1-stable_win64_console.exe"
-          & $godot --headless --path $env:GITHUB_WORKSPACE -s addons/gut/gut_cmdln.gd
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $echoServerPath = Join-Path $env:GITHUB_WORKSPACE ".godot\cargo-target\x86_64-pc-windows-gnu\debug\bridge_echo_server.exe"
+          $echoServer = Start-Process -FilePath $echoServerPath -PassThru -WindowStyle Hidden
+          $testExitCode = 0
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 50 -and -not $ready; $attempt++) {
+              $client = [System.Net.Sockets.TcpClient]::new()
+              try {
+                $client.Connect("127.0.0.1", 18765)
+                $ready = $client.Connected
+              } catch {
+                Start-Sleep -Milliseconds 100
+              } finally {
+                $client.Dispose()
+              }
+            }
+            if (-not $ready) { throw "Local bridge echo server did not start." }
+
+            & $godot --headless --path $env:GITHUB_WORKSPACE -s addons/gut/gut_cmdln.gd -gtest=res://tests/gut/integration/test_local_bridge.gd
+            $testExitCode = $LASTEXITCODE
+          } finally {
+            if (-not $echoServer.HasExited) { Stop-Process -Id $echoServer.Id -Force }
+          }
+          if ($testExitCode -ne 0) { exit $testExitCode }
 
       - name: Build GDExtension
         run: cargo build --locked --release --target x86_64-pc-windows-gnu
