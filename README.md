@@ -55,12 +55,12 @@ Set the version in `Cargo.toml` under `[package]`:
 
 ```toml
 [package]
-version = "0.1.0"
+version = "0.2.0"
 ```
 
 Before a release, update `Cargo.toml` and add the matching `X.Y.Z` section to `CHANGELOG.md`. Run `cargo check` to refresh `Cargo.lock`, then commit and push all three files. Either push a matching `vX.Y.Z` tag, or manually run **Build GDExtension**, optionally enter the matching Cargo version without the leading `v` (blank defaults to Cargo), and select **Publish GitHub Release**. A manual release creates the matching tag at the selected commit. Both paths use the changelog section as release notes and reject version mismatches or missing entries.
 
 ```powershell
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
 ```

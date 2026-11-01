@@ -4,6 +4,13 @@ Notable changes to Yawc Godot Transport are recorded here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
+### Changed
+
+- Bound inbound WebSocket payloads and validate text frames; compression is disabled until decompressed payload sizes can be limited.
+- Detach the worker during node teardown so waiting for a peer's close reply does not block the Godot thread.
+
 ## [0.1.0] - 2026-10-06
 
 ### Added
