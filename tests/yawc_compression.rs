@@ -92,6 +92,14 @@ async fn local_wss_negotiates_permessage_deflate_and_round_trips_text() {
 
                     let close = websocket.next_frame().await.expect("close frame missing");
                     assert_eq!(close.opcode(), OpCode::Close);
+
+                    let close_flush = tokio::time::timeout(TEST_TIMEOUT, websocket.next_frame())
+                        .await
+                        .expect("server close reply did not flush");
+                    assert!(
+                        close_flush.is_err(),
+                        "server should stop reading after close"
+                    );
                 });
                 session_tx
                     .send(session)
@@ -144,6 +152,12 @@ async fn local_wss_negotiates_permessage_deflate_and_round_trips_text() {
         .send(Frame::close(yawc::close::CloseCode::Normal, b""))
         .await
         .unwrap();
+
+    let close_reply = tokio::time::timeout(TEST_TIMEOUT, client.next_frame())
+        .await
+        .expect("close reply timed out")
+        .expect("server close reply missing");
+    assert_eq!(close_reply.opcode(), OpCode::Close);
 
     let session = tokio::time::timeout(TEST_TIMEOUT, session_rx.recv())
         .await

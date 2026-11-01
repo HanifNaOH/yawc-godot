@@ -88,6 +88,27 @@ func test_invalid_url_is_rejected() -> void:
 	assert_true(rejected, "invalid URL should emit error and closed")
 	assert_false(_error_message.is_empty(), "invalid URL should provide an error")
 
+func test_reentering_tree_restarts_worker() -> void:
+	_transport = ClassDB.instantiate("YawcTransport") as Node
+	assert_not_null(_transport, "transport should instantiate")
+	if _transport == null:
+		return
+	_transport.error.connect(_on_error)
+	_transport.closed.connect(_on_closed)
+
+	add_child(_transport)
+	remove_child(_transport)
+	add_child(_transport)
+
+	assert_true(_transport.connect_to_url("not a websocket url"), "command should queue after reentry")
+	var rejected := await TEST_HELPERS.wait_until(
+		get_tree(),
+		func(): return not _error_message.is_empty() and _connection_closed,
+		5000,
+	)
+	assert_true(rejected, "reentered transport should process commands")
+	assert_false(_error_message.is_empty(), "reentered transport should report invalid URL")
+
 func _is_peer_disconnected() -> bool:
 	_peer.poll()
 	if _peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:

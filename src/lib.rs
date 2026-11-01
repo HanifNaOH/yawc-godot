@@ -55,6 +55,10 @@ impl INode for YawcTransport {
         }
     }
 
+    fn enter_tree(&mut self) {
+        self.worker.restart();
+    }
+
     fn process(&mut self, _delta: f64) {
         for _ in 0..64 {
             let event = match self.worker.try_recv() {

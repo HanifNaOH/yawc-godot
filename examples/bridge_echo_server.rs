@@ -35,7 +35,10 @@ async fn main() {
                                     break;
                                 }
                             }
-                            Ok(frame) if frame.opcode() == OpCode::Close => break,
+                            Ok(frame) if frame.opcode() == OpCode::Close => {
+                                let _ = websocket.next_frame().await;
+                                break;
+                            }
                             Ok(_) => {}
                             Err(_) => break,
                         }
