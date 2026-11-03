@@ -2,9 +2,11 @@
 
 Notable changes to Yawc Godot Transport are recorded here.
 
-## [Unreleased]
-
 ## [0.2.0] - 2026-11-01
+
+### Added
+
+- Binary WebSocket send and receive support in `YawcTransport`.
 
 ### Changed
 

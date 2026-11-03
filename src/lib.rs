@@ -30,6 +30,9 @@ impl YawcTransport {
     #[signal]
     fn text_message(message: GString);
 
+    #[signal]
+    fn binary_message(message: PackedByteArray);
+
     #[func]
     fn connect_to_url(&self, url: GString) -> bool {
         self.worker.send(Command::Connect(url.to_string()))
@@ -38,6 +41,11 @@ impl YawcTransport {
     #[func]
     fn send_text(&self, message: GString) -> bool {
         self.worker.send(Command::SendText(message.to_string()))
+    }
+
+    #[func]
+    fn send_binary(&self, message: PackedByteArray) -> bool {
+        self.worker.send(Command::SendBinary(message.to_vec()))
     }
 
     #[func]
@@ -73,6 +81,10 @@ impl INode for YawcTransport {
                 Event::Closed => self.signals().closed().emit(),
                 Event::Error(message) => self.signals().error().emit(message.as_str()),
                 Event::TextMessage(message) => self.signals().text_message().emit(message.as_str()),
+                Event::BinaryMessage(message) => self
+                    .signals()
+                    .binary_message()
+                    .emit(&PackedByteArray::from(message)),
             }
         }
     }
