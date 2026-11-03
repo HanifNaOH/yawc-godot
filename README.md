@@ -1,6 +1,6 @@
 # Yawc Godot Backend
 
-Yawc Godot Backend is a standalone backend component for Godot 4.7 and later. It is a Rust GDExtension that adds the `YawcTransport` node for outbound WebSocket connections and text messaging.
+Yawc Godot Backend is a small Rust GDExtension for Godot 4.7 and later. It exposes yawc as a `YawcTransport` node with text and binary WebSocket messages.
 
 This repository contains the backend addon and its test harness, not a game, UI, or separate WebSocket server. The extension runs inside a host Godot project; that project is responsible for its UI and any application-specific protocol or game logic. Network I/O runs on a worker thread, while results are delivered to Godot through signals.
 
@@ -10,19 +10,57 @@ This repository contains the backend addon and its test harness, not a game, UI,
 
 Download a release archive and extract `addons/yawc_transport` into the host project's `res://addons/` directory. The addon includes its `.gdextension` descriptor and platform libraries. It is a runtime extension, not an editor plugin, so no `plugin.cfg` or editor-plugin activation is needed.
 
-Create the node, connect its signals, then request a connection:
+Create the node, connect its signals, then connect and send messages:
 
 ```gdscript
+var transport: Node
 
-transport.opened.connect(_on_opened)
-transport.text_message.connect(_on_text_message)
-transport.closed.connect(_on_closed)
-transport.error.connect(_on_error)
+func _ready() -> void:
+	transport = ClassDB.instantiate("YawcTransport") as Node
+	add_child(transport)
 
-transport.connect_to_url("wss://example.org/socket")
+	transport.opened.connect(_on_opened)
+	transport.text_message.connect(_on_text_message)
+	transport.binary_message.connect(_on_binary_message)
+	transport.closed.connect(_on_closed)
+	transport.error.connect(_on_error)
+
+	transport.connect_to_url("wss://example.org/socket")
+
+func _on_opened() -> void:
+	transport.send_text("hello")
+	transport.send_binary(PackedByteArray([1, 2, 3]))
+
+func _on_text_message(message: String) -> void:
+	print(message)
+
+func _on_binary_message(message: PackedByteArray) -> void:
+	print(message)
+
+func _on_closed() -> void:
+	print("WebSocket closed")
+
+func _on_error(message: String) -> void:
+	push_error(message)
 ```
 
-`connect_to_url(url)`, `send_text(message)`, and `close()` return whether the command was accepted by the transport worker, not whether the operation succeeded. Observe `opened`, `closed`, `error(message)`, and `text_message(message)` for connection outcomes and incoming text.
+`connect_to_url(url)`, `send_text(message)`, `send_binary(bytes)`, and `close()` return whether the command was accepted by the worker, not whether the operation succeeded. Observe `opened`, `closed`, `error(message)`, `text_message(message)`, and `binary_message(bytes)` for results. Incoming and outgoing work uses yawc with bounded inbound messages; signals are emitted on Godot's main thread.
+
+## Roadmap
+
+These are possible additions to the Godot client API, not commitments to a release schedule. The goal is to expose yawc features when they are useful to Godot projects while keeping the default node small.
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Configurable yawc options | Candidate | Message limits, UTF-8 validation, TCP no-delay, fragmentation, and backpressure. |
+| Handshake headers and subprotocols | Candidate | Allow applications to provide custom request headers and WebSocket subprotocols. |
+| Control frames and close details | Candidate | Optional Ping sending, Ping/Pong signals, and close codes/reasons. Yawc already replies to incoming Ping frames. |
+| Per-message compression | Deferred | Yawc supports compression, but enabling it requires a safe bound on decompressed input size. |
+| Proxy and custom connection setup | Optional | SOCKS5, TCP address overrides, and custom TLS connectors for projects that need them. |
+| HTTP/2 WebSockets | Optional | RFC 8441 support requires yawc's optional `http2` feature and a compatible server. |
+| Streaming and manual frame control | Separate API | Consider only if Godot projects need large-message streaming or low-level frame access. |
+
+Server-side WebSocket upgrades and alternate runtime integrations are outside this outbound Godot client’s scope.
 
 ## Platform Support
 

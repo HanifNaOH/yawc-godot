@@ -19,6 +19,7 @@ const MAX_INBOUND_MESSAGE_BYTES: usize = 1024 * 1024;
 pub(crate) enum Command {
     Connect(String),
     SendText(String),
+    SendBinary(Vec<u8>),
     Close,
 }
 
@@ -27,6 +28,7 @@ pub(crate) enum Event {
     Closed,
     Error(String),
     TextMessage(String),
+    BinaryMessage(Vec<u8>),
 }
 
 pub(crate) struct Worker {
@@ -173,11 +175,11 @@ async fn run_worker(
                                 pending_command = Some(Command::Connect(next_url));
                                 break 'connecting;
                             }
-                            Some(Command::SendText(_)) => {
+                            Some(Command::SendText(_)) | Some(Command::SendBinary(_)) => {
                                 if !publish(
                                     &events,
                                     &mut shutdown,
-                                    Event::Error("cannot send text before the connection opens".to_owned()),
+                                    Event::Error("cannot send before the connection opens".to_owned()),
                                 ).await {
                                     return;
                                 }
@@ -228,6 +230,16 @@ async fn run_worker(
                                     break 'connected;
                                 }
                             }
+                            Ok(frame) if frame.opcode() == OpCode::Binary => {
+                                if !publish(
+                                    &events,
+                                    &mut shutdown,
+                                    Event::BinaryMessage(frame.payload().to_vec()),
+                                ).await {
+                                    shutdown_requested = true;
+                                    break 'connected;
+                                }
+                            }
                             Ok(frame) if frame.opcode() == OpCode::Close => {
                                 flush_close_reply(&mut socket).await;
                                 if !publish(&events, &mut shutdown, Event::Closed).await {
@@ -248,6 +260,22 @@ async fn run_worker(
                                 let send_result = tokio::select! {
                                     _ = shutdown.changed() => None,
                                     result = socket.send(Frame::text(message)) => Some(result),
+                                };
+                                let Some(send_result) = send_result else {
+                                    shutdown_requested = true;
+                                    break 'connected;
+                                };
+                                if let Err(error) = send_result {
+                                    if !report_failure(&events, &mut shutdown, error.to_string()).await {
+                                        shutdown_requested = true;
+                                    }
+                                    break 'connected;
+                                }
+                            }
+                            Some(Command::SendBinary(message)) => {
+                                let send_result = tokio::select! {
+                                    _ = shutdown.changed() => None,
+                                    result = socket.send(Frame::binary(message)) => Some(result),
                                 };
                                 let Some(send_result) = send_result else {
                                     shutdown_requested = true;
@@ -288,11 +316,11 @@ async fn run_worker(
                     return;
                 }
             }
-            Command::SendText(_) => {
+            Command::SendText(_) | Command::SendBinary(_) => {
                 if !publish(
                     &events,
                     &mut shutdown,
-                    Event::Error("cannot send text while disconnected".to_owned()),
+                    Event::Error("cannot send while disconnected".to_owned()),
                 )
                 .await
                 {
