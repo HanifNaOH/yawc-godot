@@ -112,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           $godot = Join-Path $env:RUNNER_TEMP "godot\Godot_v4.7.1-stable_win64_console.exe"
-          $echoServerPath = Join-Path $env:GITHUB_WORKSPACE ".godot\cargo-target\x86_64-pc-windows-gnu\debug\bridge_echo_server.exe"
+          $echoServerPath = Join-Path $env:GITHUB_WORKSPACE ".godot\cargo-target\x86_64-pc-windows-gnu\debug\examples\bridge_echo_server.exe"
           $echoServer = Start-Process -FilePath $echoServerPath -PassThru -WindowStyle Hidden
           $testExitCode = 0
           try {
